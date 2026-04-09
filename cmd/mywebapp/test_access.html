@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>监控系统访问测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .test { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; color: #155724; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; color: #721c24; }
+        .loading { background-color: #fff3cd; border-color: #ffeaa7; color: #856404; }
+        button { padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>监控系统访问测试</h1>
+
+    <div class="test" id="test1">
+        <h3>测试1: 检查服务是否运行</h3>
+        <p id="test1-result">等待测试...</p>
+    </div>
+
+    <div class="test" id="test2">
+        <h3>测试2: 访问主页面 (http://localhost:8083/)</h3>
+        <p id="test2-result">等待测试...</p>
+    </div>
+
+    <div class="test" id="test3">
+        <h3>测试3: 访问设备监控页面 (http://localhost:8083/devices.html)</h3>
+        <p id="test3-result">等待测试...</p>
+    </div>
+
+    <div class="test" id="test4">
+        <h3>测试4: 测试API接口 (http://localhost:8083/api/devices/status)</h3>
+        <p id="test4-result">等待测试...</p>
+    </div>
+
+    <div class="test" id="test5">
+        <h3>测试5: 测试服务器状态API (http://localhost:8083/api/server/stats)</h3>
+        <p id="test5-result">等待测试...</p>
+    </div>
+
+    <button onclick="runAllTests()">运行所有测试</button>
+
+    <script>
+        async function testEndpoint(url, testId) {
+            const element = document.getElementById(testId + '-result');
+            element.parentElement.className = 'test loading';
+            element.textContent = '测试中...';
+
+            try {
+                const response = await fetch(url);
+                if (response.ok) {
+                    element.parentElement.className = 'test success';
+                    element.textContent = `✅ 成功 (状态码: ${response.status})`;
+                    return true;
+                } else {
+                    element.parentElement.className = 'test error';
+                    element.textContent = `❌ 失败 (状态码: ${response.status})`;
+                    return false;
+                }
+            } catch (error) {
+                element.parentElement.className = 'test error';
+                element.textContent = `❌ 错误: ${error.message}`;
+                return false;
+            }
+        }
+
+        async function runAllTests() {
+            const tests = [
+                { url: 'http://localhost:8083/', id: 'test2', name: '主页面' },
+                { url: 'http://localhost:8083/devices.html', id: 'test3', name: '设备监控页面' },
+                { url: 'http://localhost:8083/api/devices/status', id: 'test4', name: '设备状态API' },
+                { url: 'http://localhost:8083/api/server/stats', id: 'test5', name: '服务器统计API' }
+            ];
+
+            // 先检查服务是否运行
+            const test1Element = document.getElementById('test1-result');
+            test1Element.parentElement.className = 'test loading';
+            test1Element.textContent = '检查端口8083...';
+
+            try {
+                // 尝试简单的HTTP请求来检查服务
+                const response = await fetch('http://localhost:8083/', { method: 'HEAD' });
+                test1Element.parentElement.className = 'test success';
+                test1Element.textContent = `✅ 服务正在运行 (端口: 8083)`;
+            } catch (error) {
+                test1Element.parentElement.className = 'test error';
+                test1Element.textContent = `❌ 服务未运行: ${error.message}`;
+                return;
+            }
+
+            // 运行其他测试
+            for (const test of tests) {
+                await testEndpoint(test.url, test.id);
+                await new Promise(resolve => setTimeout(resolve, 500)); // 稍微延迟
+            }
+        }
+
+        // 页面加载时自动运行测试
+        window.onload = runAllTests;
+    </script>
+</body>
+</html>

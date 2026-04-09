@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>动态模拟数据测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #2196F3;
+            padding-bottom: 10px;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            background-color: #2196F3;
+            color: white;
+            transition: background-color 0.3s;
+        }
+        .btn:hover {
+            background-color: #0b7dda;
+        }
+        .btn-danger {
+            background-color: #f44336;
+        }
+        .btn-danger:hover {
+            background-color: #d32f2f;
+        }
+        .btn-success {
+            background-color: #4CAF50;
+        }
+        .btn-success:hover {
+            background-color: #45a049;
+        }
+        .btn-warning {
+            background-color: #ff9800;
+        }
+        .btn-warning:hover {
+            background-color: #e68900;
+        }
+        .section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+        .section h2 {
+            color: #555;
+            margin-top: 0;
+        }
+        .data-display {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 10px 0;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-item {
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1976d2;
+        }
+        .stat-label {
+            color: #555;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        .device-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        .device-table th, .device-table td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+            font-size: 12px;
+        }
+        .device-table th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        .online {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .offline {
+            color: #f44336;
+            font-weight: bold;
+        }
+        .reagent-bar {
+            height: 15px;
+            background-color: #e0e0e0;
+            border-radius: 7px;
+            margin: 3px 0;
+            overflow: hidden;
+        }
+        .reagent-fill {
+            height: 100%;
+            border-radius: 7px;
+        }
+        .reagent-normal {
+            background-color: #4CAF50;
+        }
+        .reagent-warning {
+            background-color: #ff9800;
+        }
+        .reagent-low {
+            background-color: #f44336;
+        }
+        .reagent-empty {
+            background-color: #9e9e9e;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .status-online {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .status-warning {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .status-offline {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .auto-refresh {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .auto-refresh label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>动态模拟数据测试面板</h1>
+
+        <div class="controls">
+            <button class="btn" onclick="loadTestData()">测试数据生成</button>
+            <button class="btn" onclick="loadSampleData()">加载示例数据</button>
+            <button class="btn btn-success" onclick="loadSimulatedDevices()">加载模拟设备</button>
+            <button class="btn btn-success" onclick="loadSimulatedStats()">加载模拟统计</button>
+            <button class="btn btn-warning" onclick="overrideDevices()">覆盖设备数据</button>
+            <button class="btn btn-danger" onclick="restartRandomDevice()">重启随机设备</button>
+            <button class="btn" onclick="loadAllSimulatedData()">加载所有数据</button>
+        </div>
+
+        <div class="auto-refresh">
+            <label>
+                <input type="checkbox" id="autoRefresh" onchange="toggleAutoRefresh()">
+                自动刷新 (30秒)
+            </label>
+            <span id="lastUpdate" style="color: #666; margin-left: 20px;"></span>
+        </div>
+
+        <div class="section">
+            <h2>测试数据生成</h2>
+            <div class="data-display" id="testData"></div>
+        </div>
+
+        <div class="section">
+            <h2>模拟设备统计</h2>
+            <div class="stats-grid" id="simulatedStats"></div>
+        </div>
+
+        <div class="section">
+            <h2>模拟服务器状态</h2>
+            <div class="data-display" id="serverStatus"></div>
+        </div>
+
+        <div class="section">
+            <h2>模拟设备列表</h2>
+            <div style="margin: 10px 0;">
+                <label>显示数量:
+                    <select id="deviceCount" onchange="loadSimulatedDevices()">
+                        <option value="5">5</option>
+                        <option value="10" selected>10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                    </select>
+                </label>
+            </div>
+            <table class="device-table" id="deviceTable">
+                <thead>
+                    <tr>
+                        <th>设备ID</th>
+                        <th>设备名称</th>
+                        <th>状态</th>
+                        <th>在线状态</th>
+                        <th>故障状态</th>
+                        <th>试剂状态</th>
+                        <th>IP地址</th>
+                        <th>最后检查</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="deviceTableBody">
+                    <!-- 设备数据将通过JS动态加载 -->
+                </tbody>
+            </table>
+        </div>
+
+        <div class="section">
+            <h2>API端点说明</h2>
+            <div class="data-display">
+                <h3>模拟数据API:</h3>
+                <ul>
+                    <li><strong>GET /api/simulated/test</strong> - 测试数据生成</li>
+                    <li><strong>GET /api/simulated/sample</strong> - 示例数据</li>
+                    <li><strong>GET /api/simulated/devices</strong> - 模拟设备列表</li>
+                    <li><strong>GET /api/simulated/devices/status</strong> - 所有设备状态</li>
+                    <li><strong>GET /api/simulated/devices/stats</strong> - 设备统计</li>
+                    <li><strong>GET /api/simulated/server/status</strong> - 服务器状态</li>
+                    <li><strong>GET /api/simulated/server/stats</strong> - 服务器统计</li>
+                    <li><strong>POST /api/simulated/devices/{id}/restart</strong> - 重启设备</li>
+                    <li><strong>POST /api/simulated/override?count=10</strong> - 覆盖设备数据</li>
+                </ul>
+                <h3>原始API (仍然可用):</h3>
+                <ul>
+                    <li><strong>GET /api/devices</strong> - 原始设备列表</li>
+                    <li><strong>GET /api/devices/status</strong> - 原始设备状态</li>
+                    <li><strong>GET /api/server/status</strong> - 原始服务器状态</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+        let autoRefreshInterval = null;
+
+        // 加载测试数据
+        async function loadTestData() {
+            try {
+                const response = await fetch(`${API_BASE}/simulated/test`);
+                const data = await response.json();
+                document.getElementById('testData').innerHTML =
+                    `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+                updateLastUpdateTime();
+            } catch (error) {
+                console.error('加载测试数据失败:', error);
+                document.getElementById('testData').innerHTML =
+                    `<div style="color: red;">加载失败: ${error.message}</div>`;
+            }
+        }
+
+        // 加载示例数据
+        async function loadSampleData() {
+            try {
+                const response = await fetch(`${API_BASE}/simulated/sample`);
+                const data = await response.json();
+                document.getElementById('testData').innerHTML =
+                    `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+                updateLastUpdateTime();
+            } catch (error) {
+                console.error('加载示例数据失败:', error);
+            }
+        }
+
+        // 加载模拟设备
+        async function loadSimulatedDevices() {
+            const count = document.getElementById('deviceCount').value;
+            try {
+                const response = await fetch(`${API_BASE}/simulated/devices?count=${count}`);
+                const devices = await response.json();
+                renderDevices(devices);
+                updateLastUpdateTime();
+            } catch (error) {
+                console.error('加载模拟设备失败:', error);
+            }
+        }
+
+        // 加载模拟统计
+        async function loadSimulatedStats() {
+            try {
+                const response = await fetch(`${API_BASE}/simulated/devices/stats`);
+                const stats = await response.json();
+                renderStats(stats);
+                updateLastUpdateTime();
+            } catch (error) {
+                console.error('加载模拟统计失败:', error);
+            }
+        }
+
+        // 加载服务器状态
+        async function loadServerStatus() {
+            try {
+                const response = await fetch(`${API_BASE}/simulated/server/stats`);
+                const server = await response.json();
+                document.getElementById('serverStatus').innerHTML =
+                    `<pre>${JSON.stringify(server, null, 2)}</pre>`;
+                updateLastUpdateTime();
+            } catch (error) {
+                console.error('加载服务器状态失败:', error);
+            }
+        }
+
+        // 覆盖设备数据
+        async function overrideDevices() {
+            const count = document.getElementById('deviceCount').value;
+            if (!confirm(`确定要用 ${count} 个模拟设备覆盖现有设备数据吗？`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/simulated/override?count=${count}`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                alert(`覆盖成功: ${result.message}`);
+                loadAllSimulatedData();
+            } catch (error) {
+                console.error('覆盖设备数据失败:', error);
+                alert('覆盖失败，请检查控制台');
+            }
+        }
+
+        // 重启随机设备
+        async function restartRandomDevice() {
+            try {
+                // 先获取设备列表
+                const response = await fetch(`${API_BASE}/simulated/devices?count=10`);
+                const devices = await response.json();
+
+                if (devices.length === 0) {
+                    alert('没有可重启的设备');
+                    return;
+                }
+
+                // 随机选择一个设备
+                const randomIndex = Math.floor(Math.random() * devices.length);
+                const device = devices[randomIndex];
+
+                if (!confirm(`确定要重启设备 ${device.device_id} (${device.name}) 吗？`)) {
+                    return;
+                }
+
+                const restartResponse = await fetch(`${API_BASE}/simulated/devices/${device.device_id}/restart`, {
+                    method: 'POST'
+                });
+
+                if (restartResponse.ok) {
+                    alert(`设备 ${device.device_id} 重启命令已发送`);
+                    // 等待2秒后刷新数据
+                    setTimeout(loadAllSimulatedData, 2000);
+                } else {
+                    const error = await restartResponse.text();
+                    alert(`重启失败: ${error}`);
+                }
+            } catch (error) {
+                console.error('重启设备失败:', error);
+                alert('重启设备失败，请检查控制台');
+            }
+        }
+
+        // 加载所有模拟数据
+        async function loadAllSimulatedData() {
+            try {
+                await Promise.all([
+                    loadSimulatedDevices(),
+                    loadSimulatedStats(),
+                    loadServerStatus()
+                ]);
+                updateLastUpdateTime();
+            } catch (error) {
+                console.error('加载所有数据失败:', error);
+            }
+        }
+
+        // 渲染设备列表
+        function renderDevices(devices) {
+            const tbody = document.getElementById('deviceTableBody');
+            tbody.innerHTML = '';
+
+            devices.forEach(device => {
+                const row = document.createElement('tr');
+
+                // 计算试剂状态
+                let reagentStatus = '正常';
+                let reagentClass = 'reagent-normal';
+                if (device.reagents && device.reagents.length > 0) {
+                    const minPercent = Math.min(...device.reagents.map(r => r.percent));
+                    if (minPercent === 0) {
+                        reagentStatus = '耗尽';
+                        reagentClass = 'reagent-empty';
+                    } else if (minPercent < 30) {
+                        reagentStatus = '不足';
+                        reagentClass = 'reagent-low';
+                    } else if (minPercent < 70) {
+                        reagentStatus = '警告';
+                        reagentClass = 'reagent-warning';
+                    }
+                }
+
+                row.innerHTML = `
+                    <td>${device.device_id}</td>
+                    <td>${device.name}</td>
+                    <td>
+                        <span class="status-badge ${device.status === 'enabled' ? 'status-online' : 'status-offline'}">
+                            ${device.status === 'enabled' ? '启用' : '禁用'}
+                        </span>
+                    </td>
+                    <td class="${device.is_online ? 'online' : 'offline'}">
+                        ${device.is_online ? '在线' : '离线'}
+                    </td>
+                    <td>${device.has_fault ? '有故障' : '正常'}</td>
+                    <td>
+                        ${device.reagents ? device.reagents.map(reagent => `
+                            <div style="margin-bottom: 5px;">
+                                <div style="font-size: 11px;">${reagent.name}</div>
+                                <div class="reagent-bar">
+                                    <div class="reagent-fill ${reagentClass}"
+                                         style="width: ${Math.min(reagent.percent, 100)}%"></div>
+                                </div>
+                                <div style="font-size: 10px; color: #666;">
+                                    ${reagent.current.toFixed(1)}/${reagent.capacity}${reagent.unit}
+                                </div>
+                            </div>
+                        `).join('') : '无试剂'}
+                    </td>
+                    <td>${device.ip}:${device.port}</td>
+                    <td>${formatTime(device.last_check)}</td>
+                    <td>
+                        <button class="btn" style="padding: 3px 8px; font-size: 11px;"
+                                onclick="restartDevice('${device.device_id}')"
+                                ${device.status !== 'enabled' ? 'disabled' : ''}>
+                            重启
+                        </button>
+                    </td>
+                `;
+
+                tbody.appendChild(row);
+            });
+        }
+
+        // 渲染统计信息
+        function renderStats(stats) {
+            const container = document.getElementById('simulatedStats');
+
+            const statItems = [
+                { label: '总设备数', value: stats.total_devices, color: '#1976d2' },
+                { label: '启用设备', value: stats.enabled_devices, color: '#4CAF50' },
+                { label: '在线设备', value: stats.online_devices, color: '#2196F3' },
+                { label: '故障设备', value: stats.devices_with_fault, color: '#f44336' },
+                { label: '试剂不足', value: stats.devices_low_reagent, color: '#ff9800' },
+                { label: '试剂耗尽', value: stats.devices_empty_reagent, color: '#9e9e9e' },
+                { label: '离线设备', value: stats.offline_devices, color: '#757575' },
+                { label: '禁用设备', value: stats.disabled_devices, color: '#607d8b' }
+            ];
+
+            container.innerHTML = statItems.map(item => `
+                <div class="stat-item">
+                    <div class="stat-value" style="color: ${item.color}">${item.value}</div>
+                    <div class="stat-label">${item.label}</div>
+                </div>
+            `).join('');
+        }
+
+        // 重启指定设备
+        async function restartDevice(deviceId) {
+            if (!confirm(`确定要重启设备 ${deviceId} 吗？`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/simulated/devices/${deviceId}/restart`, {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    alert(`设备 ${deviceId} 重启命令已发送`);
+                    // 等待2秒后刷新数据
+                    setTimeout(loadAllSimulatedData, 2000);
+                } else {
+                    const error = await response.text();
+                    alert(`重启失败: ${error}`);
+                }
+            } catch (error) {
+                console.error('重启设备失败:', error);
+                alert('重启设备失败，请检查网络连接');
+            }
+        }
+
+        // 格式化时间
+        function formatTime(timestamp) {
+            try {
+                const date = new Date(timestamp);
+                return date.toLocaleTimeString('zh-CN');
+            } catch (e) {
+                return timestamp;
+            }
+        }
+
+        // 更新最后刷新时间
+        function updateLastUpdateTime() {
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent =
+                `最后更新: ${now.toLocaleTimeString('zh-CN')}`;
+        }
+
+        // 切换自动刷新
+        function toggleAutoRefresh() {
+            const checkbox = document.getElementById('autoRefresh');
+
+            if (checkbox.checked) {
+                autoRefreshInterval = setInterval(loadAllSimulatedData, 30000);
+                console.log('自动刷新已启用');
+            } else {
+                if (autoRefreshInterval) {
+                    clearInterval(autoRefreshInterval);
+                    autoRefreshInterval = null;
+                    console.log('自动刷新已禁用');
+                }
+            }
+        }
+
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            loadAllSimulatedData();
+            updateLastUpdateTime();
+        });
+    </script>
+</body>
+</html>

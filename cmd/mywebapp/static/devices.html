@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>设备监控面板</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        .server-status-bar {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .server-status-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .server-status-title {
+            font-weight: bold;
+            font-size: 1.1em;
+            color: #333;
+        }
+        .server-status-indicators {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .server-status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .server-status-label {
+            color: #666;
+            font-size: 14px;
+        }
+        .server-status-value {
+            font-weight: bold;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .status-online {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .status-warning {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .status-offline {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .response-time {
+            font-size: 12px;
+            color: #666;
+            margin-left: 5px;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+        }
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        .device-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        .device-table th, .device-table td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        .device-table th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        .status-enabled {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .status-disabled {
+            color: #f44336;
+            font-weight: bold;
+        }
+        .online {
+            color: #4CAF50;
+        }
+        .offline {
+            color: #f44336;
+        }
+        .reagent-bar {
+            height: 20px;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+            margin: 5px 0;
+            overflow: hidden;
+        }
+        .reagent-fill {
+            height: 100%;
+            border-radius: 10px;
+            transition: width 0.3s;
+        }
+        .reagent-normal {
+            background-color: #4CAF50;
+        }
+        .reagent-warning {
+            background-color: #ff9800;
+        }
+        .reagent-low {
+            background-color: #f44336;
+        }
+        .reagent-empty {
+            background-color: #9e9e9e;
+        }
+        .actions {
+            display: flex;
+            gap: 10px;
+        }
+        .btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-restart {
+            background-color: #2196F3;
+            color: white;
+        }
+        .btn-refresh {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .btn-refresh:hover {
+            background-color: #45a049;
+        }
+        .btn-restart:hover {
+            background-color: #0b7dda;
+        }
+        .btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>设备监控面板</h1>
+
+        <!-- 服务器状态栏 -->
+        <div class="server-status-bar" id="serverStatusBar">
+            <div class="server-status-header">
+                <div class="server-status-title">俄罗斯中间件服务器状态</div>
+                <div id="serverLastCheck" style="font-size: 12px; color: #666;"></div>
+            </div>
+            <div class="server-status-indicators" id="serverIndicators">
+                <!-- 服务器状态指标将通过JS动态加载 -->
+            </div>
+        </div>
+
+        <div class="stats" id="stats">
+            <!-- 设备统计信息将通过JS动态加载 -->
+        </div>
+
+        <div style="margin: 20px 0;">
+            <button class="btn btn-refresh" onclick="loadAllData()">刷新数据</button>
+            <span id="lastUpdate" style="margin-left: 20px; color: #666;"></span>
+        </div>
+
+        <table class="device-table">
+            <thead>
+                <tr>
+                    <th>仪器编号</th>
+                    <th>仪器ID</th>
+                    <th>仪器名称</th>
+                    <th>仪器状态</th>
+                    <th>在线状态</th>
+                    <th>故障状态</th>
+                    <th>试剂状态</th>
+                    <th>最后检查</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="deviceTable">
+                <!-- 设备数据将通过JS动态加载 -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // API基础URL
+        const API_BASE = '/api';
+
+        // 加载所有数据
+        async function loadAllData() {
+            try {
+                await Promise.all([
+                    loadServerStatus(),
+                    loadStats(),
+                    loadDevices()
+                ]);
+                updateLastUpdateTime();
+            } catch (error) {
+                console.error('加载数据失败:', error);
+                alert('加载数据失败，请检查网络连接');
+            }
+        }
+
+        // 加载服务器状态
+        async function loadServerStatus() {
+            try {
+                const response = await fetch(`${API_BASE}/server/stats`);
+                const serverStats = await response.json();
+
+                const indicatorsContainer = document.getElementById('serverIndicators');
+                indicatorsContainer.innerHTML = `
+                    <div class="server-status-item">
+                        <span class="server-status-label">Web服务:</span>
+                        <span class="server-status-value ${serverStats.web_service ? 'status-online' : 'status-offline'}">
+                            ${serverStats.web_service ? '在线' : '离线'}
+                        </span>
+                    </div>
+                    <div class="server-status-item">
+                        <span class="server-status-label">API服务:</span>
+                        <span class="server-status-value ${serverStats.api_service ? 'status-online' : 'status-offline'}">
+                            ${serverStats.api_service ? '正常' : '异常'}
+                        </span>
+                    </div>
+                    <div class="server-status-item">
+                        <span class="server-status-label">响应时间:</span>
+                        <span class="server-status-value ${getServerStatusClass(serverStats.response_time, serverStats.status)}">
+                            ${serverStats.response_time > 0 ? serverStats.response_time + 'ms' : '超时'}
+                        </span>
+                    </div>
+                    <div class="server-status-item">
+                        <span class="server-status-label">整体状态:</span>
+                        <span class="server-status-value ${getStatusClass(serverStats.status)}">
+                            ${getStatusText(serverStats.status)}
+                        </span>
+                    </div>
+                `;
+
+                // 更新最后检查时间
+                const lastCheck = new Date(serverStats.last_check);
+                document.getElementById('serverLastCheck').textContent =
+                    `最后检查: ${lastCheck.toLocaleString('zh-CN')}`;
+
+            } catch (error) {
+                console.error('加载服务器状态失败:', error);
+                document.getElementById('serverIndicators').innerHTML = `
+                    <div class="server-status-item">
+                        <span class="server-status-label">状态:</span>
+                        <span class="server-status-value status-offline">检查失败</span>
+                    </div>
+                `;
+            }
+        }
+
+        // 获取服务器状态CSS类
+        function getServerStatusClass(responseTime, status) {
+            if (status === 'offline') return 'status-offline';
+            if (status === 'warning') return 'status-warning';
+            if (responseTime > 1000) return 'status-warning';
+            return 'status-online';
+        }
+
+        // 获取状态CSS类
+        function getStatusClass(status) {
+            switch(status) {
+                case 'online': return 'status-online';
+                case 'warning': return 'status-warning';
+                case 'offline': return 'status-offline';
+                default: return 'status-offline';
+            }
+        }
+
+        // 获取状态文本
+        function getStatusText(status) {
+            switch(status) {
+                case 'online': return '在线';
+                case 'warning': return '警告';
+                case 'offline': return '离线';
+                default: return '未知';
+            }
+        }
+
+        // 加载统计信息
+        async function loadStats() {
+            const response = await fetch(`${API_BASE}/devices/stats`);
+            const stats = await response.json();
+
+            const statsContainer = document.getElementById('stats');
+            statsContainer.innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-value">${stats.total_devices}</div>
+                    <div class="stat-label">总设备数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.enabled_devices}</div>
+                    <div class="stat-label">启用设备</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.online_devices}</div>
+                    <div class="stat-label">在线设备</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.devices_with_fault}</div>
+                    <div class="stat-label">故障设备</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.devices_low_reagent}</div>
+                    <div class="stat-label">试剂不足</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.devices_empty_reagent}</div>
+                    <div class="stat-label">试剂耗尽</div>
+                </div>
+            `;
+        }
+
+        // 加载设备列表
+        async function loadDevices() {
+            const response = await fetch(`${API_BASE}/devices/status`);
+            const devices = await response.json();
+
+            const tableBody = document.getElementById('deviceTable');
+            tableBody.innerHTML = '';
+
+            devices.forEach(device => {
+                const row = document.createElement('tr');
+
+                // 获取设备详情（包含ID）
+                const deviceDetail = getDeviceDetail(device.device_id);
+
+                row.innerHTML = `
+                    <td>${deviceDetail ? deviceDetail.id : 'N/A'}</td>
+                    <td>${device.device_id}</td>
+                    <td>${device.device_name}</td>
+                    <td class="status-${device.status}">${device.status === 'enabled' ? '启用' : '禁用'}</td>
+                    <td class="${device.is_online ? 'online' : 'offline'}">
+                        ${device.is_online ? '在线' : '离线'}
+                    </td>
+                    <td>${device.has_fault ? '有故障' : '正常'}</td>
+                    <td>
+                        ${device.reagents.map(reagent => `
+                            <div>
+                                <div style="font-size: 12px; margin-bottom: 2px;">${reagent.name}</div>
+                                <div class="reagent-bar">
+                                    <div class="reagent-fill ${getReagentClass(reagent.percent)}"
+                                         style="width: ${reagent.percent}%"></div>
+                                </div>
+                                <div style="font-size: 11px; color: #666;">
+                                    ${reagent.current.toFixed(1)}/${reagent.capacity}${reagent.unit} (${reagent.percent.toFixed(1)}%)
+                                </div>
+                            </div>
+                        `).join('')}
+                    </td>
+                    <td>${formatTime(device.last_check)}</td>
+                    <td>
+                        <div class="actions">
+                            <button class="btn btn-restart"
+                                    onclick="restartDevice('${device.device_id}')"
+                                    ${device.status !== 'enabled' ? 'disabled' : ''}>
+                                重启
+                            </button>
+                        </div>
+                    </td>
+                `;
+
+                tableBody.appendChild(row);
+            });
+        }
+
+        // 获取设备详情（从设备列表）
+        async function getDeviceDetail(deviceId) {
+            try {
+                const response = await fetch(`${API_BASE}/devices`);
+                const devices = await response.json();
+                return devices.find(d => d.device_id === deviceId);
+            } catch (error) {
+                console.error('获取设备详情失败:', error);
+                return null;
+            }
+        }
+
+        // 获取试剂状态对应的CSS类
+        function getReagentClass(percent) {
+            if (percent === 0) return 'reagent-empty';
+            if (percent < 30) return 'reagent-low';
+            if (percent < 70) return 'reagent-warning';
+            return 'reagent-normal';
+        }
+
+        // 重启设备
+        async function restartDevice(deviceId) {
+            if (!confirm(`确定要重启设备 ${deviceId} 吗？`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/devices/${deviceId}/restart`, {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    alert('重启命令已发送');
+                    // 等待2秒后刷新数据
+                    setTimeout(loadAllData, 2000);
+                } else {
+                    const error = await response.text();
+                    alert(`重启失败: ${error}`);
+                }
+            } catch (error) {
+                console.error('重启设备失败:', error);
+                alert('重启设备失败，请检查网络连接');
+            }
+        }
+
+        // 格式化时间
+        function formatTime(timestamp) {
+            const date = new Date(timestamp);
+            return date.toLocaleString('zh-CN');
+        }
+
+        // 更新最后刷新时间
+        function updateLastUpdateTime() {
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent =
+                `最后更新: ${now.toLocaleString('zh-CN')}`;
+        }
+
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            loadAllData();
+            // 每30秒自动刷新
+            setInterval(loadAllData, 30000);
+        });
+    </script>
+</body>
+</html>
