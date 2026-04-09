@@ -4,12 +4,21 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
+	"time"
 
+	"github.com/project47/cmd/mywebapp/data"
+	"github.com/project47/cmd/mywebapp/global"
 	"github.com/project47/cmd/mywebapp/handlers"
 )
 
 func main() {
+	// 初始化全局数据管理器
+	initDataManager()
+
 	// 使用自定义多路复用器
 	mux := http.NewServeMux()
 
@@ -62,16 +71,26 @@ func main() {
 		}
 	})
 
-	// 静态文件服务 - 使用绝对路径
-	fs := http.FileServer(http.Dir("./static"))
+	// 添加管理API
+	mux.HandleFunc("/api/admin/data-source", handlers.DataSourceHandler)
+	mux.HandleFunc("/api/admin/refresh", handlers.RefreshDataHandler)
+	mux.HandleFunc("/api/admin/status", handlers.DataManagerStatusHandler)
+
+	// 智能查找静态文件目录（三重回退机制）
+	staticDir := findStaticDir()
+	log.Printf("使用的静态文件目录: %s", staticDir)
+
+	fs := http.FileServer(http.Dir(staticDir))
 
 	// 处理根路径
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
 			// 根路径，直接提供index.html
-			http.ServeFile(w, r, "./static/index.html")
+			indexPath := filepath.Join(staticDir, "index.html")
+			http.ServeFile(w, r, indexPath)
 		} else {
-			// 其他路径使用文件服务器
+			// 其他路径，去掉开头的"/"再交给文件服务器
+			r.URL.Path = strings.TrimPrefix(r.URL.Path, "/")
 			fs.ServeHTTP(w, r)
 		}
 	})
@@ -85,5 +104,97 @@ func main() {
 	fmt.Println("设备统计: http://localhost:8083/api/devices/stats")
 	fmt.Println("服务器状态: http://localhost:8083/api/server/status")
 	fmt.Println("服务器统计: http://localhost:8083/api/server/stats")
+	fmt.Println("数据管理API: http://localhost:8083/api/admin/data-source")
+	fmt.Println("数据刷新API: http://localhost:8083/api/admin/refresh")
+	fmt.Println("管理器状态API: http://localhost:8083/api/admin/status")
+
 	log.Fatal(http.ListenAndServe(":8083", mux))
+}
+
+// findStaticDir 智能查找静态文件目录
+func findStaticDir() string {
+	// 方法1：尝试当前工作目录
+	cwd, err := os.Getwd()
+	if err == nil {
+		staticDir := filepath.Join(cwd, "static")
+		if _, err := os.Stat(staticDir); err == nil {
+			return staticDir
+		}
+	}
+
+	// 方法2：尝试可执行文件目录
+	exeDir, err := os.Executable()
+	if err == nil {
+		exeDir = filepath.Dir(exeDir)
+		staticDir := filepath.Join(exeDir, "static")
+		if _, err := os.Stat(staticDir); err == nil {
+			return staticDir
+		}
+	}
+
+	// 方法3：尝试源代码目录（通过调用栈）
+	_, filename, _, ok := runtime.Caller(0)
+	if ok {
+		sourceDir := filepath.Dir(filename)
+		staticDir := filepath.Join(sourceDir, "static")
+		if _, err := os.Stat(staticDir); err == nil {
+			return staticDir
+		}
+	}
+
+	// 方法4：硬编码回退（开发时使用）
+	devPaths := []string{
+		"./static",                            // 相对路径
+		"E:\\FILE\\gostudy\\project47\\cmd\\mywebapp\\static", // 绝对路径
+	}
+
+	for _, path := range devPaths {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+
+	// 所有方法都失败
+	log.Fatal("无法找到静态文件目录(static/)。请确保static目录存在。")
+	return ""
+}
+
+// initDataManager 初始化数据管理器
+func initDataManager() {
+	// 配置数据管理器
+	config := &data.Config{
+		DataSource:      data.SourceMiddleware, // 默认尝试连接中间件
+		MiddlewareURL:   "http://localhost:8080", // 俄罗斯中间件地址
+		CacheTTL:        30 * time.Second,
+		UpdateInterval:  30 * time.Second,
+		MaxRetries:      3,
+		RetryDelay:      1 * time.Second,
+		EnableFallback:  true, // 启用回退
+		FallbackTimeout: 5 * time.Second,
+	}
+
+	// 初始化全局管理器
+	if err := global.GetInstance().Initialize(config); err != nil {
+		log.Printf("警告: 初始化数据管理器失败: %v", err)
+		log.Println("将使用回退数据（本地硬编码数据）")
+
+		// 尝试使用回退配置
+		fallbackConfig := &data.Config{
+			DataSource:     data.SourceFallback,
+			EnableFallback: true,
+		}
+
+		if err := global.GetInstance().Initialize(fallbackConfig); err != nil {
+			log.Fatalf("致命错误: 无法初始化数据管理器: %v", err)
+		}
+	}
+
+	// 检查数据源状态
+	dm, err := global.GetInstance().GetDataManager()
+	if err == nil {
+		status := dm.GetStatus()
+		log.Printf("数据管理器初始化完成")
+		log.Printf("当前数据源: %s", status["data_source"])
+		log.Printf("设备数量: %v", status["device_count"])
+	}
 }

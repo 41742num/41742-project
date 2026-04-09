@@ -42,6 +42,7 @@ type DeviceStatus struct {
 }
 
 // 全局设备列表（可以从配置文件或数据库加载）
+// 注意：现在这个变量作为回退数据使用
 var Devices = []Device{
 	{
 		ID:          "DEV001",

@@ -25,7 +25,7 @@ func SimulatedDevicesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 生成模拟设备
-	simulator := mock.GetDynamicSimulator()
+	simulator := mock.GetDynamicSimulator() //获取动态模拟器实例
 	devices := simulator.GetDevices()
 
 	// 如果请求了特定数量，只返回前N个
@@ -54,7 +54,7 @@ func SimulatedDeviceStatusHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	deviceID := parts[0]
-	status, err := mock.GetSimulatedDeviceStatus(deviceID)
+	status, err := mock.GetSimulatedDeviceStatus(deviceID) //获取单个设备的模拟状态
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -71,7 +71,7 @@ func SimulatedAllDevicesStatusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	statuses := mock.GetSimulatedAllDevicesStatus()
+	statuses := mock.GetSimulatedAllDevicesStatus() //获取所有设备模拟状态
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(statuses)
 }
@@ -83,7 +83,7 @@ func SimulatedDeviceStatsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stats := mock.GetSimulatedDeviceStats()
+	stats := mock.GetSimulatedDeviceStats() //获取设备模拟统计
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
 }
@@ -95,7 +95,7 @@ func SimulatedServerStatusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	status := mock.GetSimulatedServerStatus()
+	status := mock.GetSimulatedServerStatus() //获取服务器模拟状态
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(status)
 }
@@ -107,7 +107,7 @@ func SimulatedServerStatsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stats := mock.GetSimulatedServerStats()
+	stats := mock.GetSimulatedServerStats() //获取服务器模拟统计
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
 }
@@ -129,7 +129,7 @@ func SimulatedDeviceRestartHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	deviceID := parts[0]
-	err := mock.RestartDeviceWithSimulation(deviceID)
+	err := mock.RestartDeviceWithSimulation(deviceID) //模拟重启设备
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -149,7 +149,7 @@ func SimulatedTestHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	testData := mock.TestGenerator()
+	testData := mock.TestGenerator() //生成测试数据
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(testData)
 }
@@ -161,7 +161,7 @@ func SimulatedSampleHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sampleData := mock.GenerateSampleData()
+	sampleData := mock.GenerateSampleData() //生成示例数据
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(sampleData)
 }
@@ -187,9 +187,9 @@ func OverrideDevicesHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message":      "Devices overridden with simulated data",
-		"device_count": count,
-		"original_api": "Original APIs still available at /api/*",
+		"message":       "Devices overridden with simulated data",
+		"device_count":  count,
+		"original_api":  "Original APIs still available at /api/*",
 		"simulated_api": "Simulated APIs available at /api/simulated/*",
 	})
 }
