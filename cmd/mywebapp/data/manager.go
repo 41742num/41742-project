@@ -2,9 +2,11 @@ package data
 
 import (
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
+	"github.com/project47/cmd/mywebapp/database"
 	"github.com/project47/cmd/mywebapp/middleware"
 	"github.com/project47/cmd/mywebapp/types"
 )
@@ -15,6 +17,8 @@ type DataSource string
 const (
 	// SourceMiddleware 从俄罗斯中间件获取数据
 	SourceMiddleware DataSource = "middleware"
+	// SourceDatabase 从数据库获取历史数据
+	SourceDatabase DataSource = "database"
 	// SourceMock 使用模拟数据
 	SourceMock DataSource = "mock"
 	// SourceFallback 回退到本地数据
@@ -26,6 +30,7 @@ type DataManager struct {
 	mutex          sync.RWMutex
 	config         *Config
 	middleware     *middleware.MiddlewareClient
+	dbManager      *database.DatabaseManager
 	currentSource  DataSource
 	devices        []types.Device
 	deviceStatuses map[string]types.DeviceStatus
@@ -41,6 +46,11 @@ type Config struct {
 	MiddlewareURL   string     `json:"middleware_url"`
 	MiddlewareAPIKey string    `json:"middleware_api_key"`
 
+	// 数据库配置
+	DatabaseType    string        `json:"database_type"`
+	SQLitePath      string        `json:"sqlite_path"`
+	EnableDatabase  bool          `json:"enable_database"`
+
 	// 缓存配置
 	CacheTTL        time.Duration `json:"cache_ttl"`
 	UpdateInterval  time.Duration `json:"update_interval"`
@@ -52,19 +62,26 @@ type Config struct {
 	// 回退配置
 	EnableFallback  bool          `json:"enable_fallback"`
 	FallbackTimeout time.Duration `json:"fallback_timeout"`
+
+	// 历史数据保留天数
+	DataRetentionDays int `json:"data_retention_days"`
 }
 
 // DefaultConfig 默认配置
 func DefaultConfig() *Config {
 	return &Config{
-		DataSource:      SourceMiddleware,
-		MiddlewareURL:   "http://localhost:8080",
-		CacheTTL:        30 * time.Second,
-		UpdateInterval:  30 * time.Second,
-		MaxRetries:      3,
-		RetryDelay:      1 * time.Second,
-		EnableFallback:  true,
-		FallbackTimeout: 5 * time.Second,
+		DataSource:        SourceMiddleware,
+		MiddlewareURL:     "http://localhost:8080",
+		DatabaseType:      "sqlite",
+		SQLitePath:        "./data/project47.db",
+		EnableDatabase:    true,
+		CacheTTL:          30 * time.Second,
+		UpdateInterval:    30 * time.Second,
+		MaxRetries:        3,
+		RetryDelay:        1 * time.Second,
+		EnableFallback:    true,
+		FallbackTimeout:   5 * time.Second,
+		DataRetentionDays: 30,
 	}
 }
 
@@ -95,6 +112,23 @@ func NewDataManager(config *Config) (*DataManager, error) {
 		dm.middleware = middleware.NewMiddlewareClient(middlewareConfig)
 	}
 
+	// 初始化数据库管理器
+	if config.EnableDatabase {
+		dbConfig := &database.DBConfig{
+			Type:             config.DatabaseType,
+			SQLitePath:       config.SQLitePath,
+			AutoMigrate:      true,
+			EnableQueryLog:   false,
+		}
+		dbManager, err := database.NewDatabaseManager(dbConfig)
+		if err != nil {
+			log.Printf("警告: 初始化数据库管理器失败: %v", err)
+			log.Println("将禁用数据库功能")
+		} else {
+			dm.dbManager = dbManager
+		}
+	}
+
 	// 初始化设备数据
 	if err := dm.initializeDevices(); err != nil {
 		return nil, fmt.Errorf("初始化设备数据失败: %v", err)
@@ -102,6 +136,11 @@ func NewDataManager(config *Config) (*DataManager, error) {
 
 	// 启动后台更新任务
 	go dm.startBackgroundUpdate()
+
+	// 启动数据库清理任务
+	if dm.dbManager != nil {
+		go dm.startDatabaseCleanup()
+	}
 
 	return dm, nil
 }
@@ -114,6 +153,8 @@ func (dm *DataManager) initializeDevices() error {
 	switch dm.currentSource {
 	case SourceMiddleware:
 		return dm.loadFromMiddleware()
+	case SourceDatabase:
+		return dm.loadFromDatabase()
 	case SourceMock:
 		return dm.loadFromMock()
 	case SourceFallback:
@@ -140,6 +181,34 @@ func (dm *DataManager) loadFromMiddleware() error {
 
 	dm.devices = devices
 	dm.lastUpdate = time.Now()
+	return nil
+}
+
+// loadFromDatabase 从数据库加载数据
+func (dm *DataManager) loadFromDatabase() error {
+	if dm.dbManager == nil {
+		if dm.config.EnableFallback {
+			dm.currentSource = SourceFallback
+			return dm.loadFromFallback()
+		}
+		return fmt.Errorf("数据库管理器未初始化")
+	}
+
+	devices, err := dm.dbManager.GetDevicesFromDatabase()
+	if err != nil {
+		if dm.config.EnableFallback {
+			dm.currentSource = SourceFallback
+			return dm.loadFromFallback()
+		}
+		return fmt.Errorf("从数据库加载设备失败: %v", err)
+	}
+
+	dm.devices = devices
+	dm.lastUpdate = time.Now()
+
+	// 记录数据源切换
+	// 注意：这里应该通过dbManager的store来记录，但为了简化先跳过
+
 	return nil
 }
 
@@ -261,9 +330,30 @@ func (dm *DataManager) updateDevices() {
 			dm.lastUpdate = time.Now()
 			// 清除状态缓存，因为设备列表可能已更新
 			dm.deviceStatuses = make(map[string]types.DeviceStatus)
+
+			// 同步到数据库
+			if dm.dbManager != nil {
+				go func() {
+					if err := dm.dbManager.SyncDevicesFromMiddleware(devices); err != nil {
+						log.Printf("同步到数据库失败: %v", err)
+					}
+				}()
+			}
 		} else if dm.config.EnableFallback {
 			dm.currentSource = SourceFallback
 			dm.loadFromFallback()
+		}
+	case SourceDatabase:
+		// 从数据库更新
+		if dm.dbManager != nil {
+			if devices, err := dm.dbManager.GetDevicesFromDatabase(); err == nil {
+				dm.devices = devices
+				dm.lastUpdate = time.Now()
+				dm.deviceStatuses = make(map[string]types.DeviceStatus)
+			} else if dm.config.EnableFallback {
+				dm.currentSource = SourceFallback
+				dm.loadFromFallback()
+			}
 		}
 	case SourceMock, SourceFallback:
 		// 对于模拟和回退数据，只需更新最后更新时间
@@ -325,6 +415,19 @@ func (dm *DataManager) GetDeviceStatus(deviceID string) (types.DeviceStatus, err
 			// 回退到本地计算
 			status = dm.calculateDeviceStatus(*device)
 			err = nil
+		}
+	case SourceDatabase:
+		// 从数据库获取最新状态
+		if dm.dbManager != nil {
+			// 尝试从数据库获取设备
+			if dbDevice, err := dm.dbManager.GetDeviceFromDatabase(deviceID); err == nil && dbDevice != nil {
+				status = dm.calculateDeviceStatus(*dbDevice)
+			} else {
+				// 回退到当前设备数据
+				status = dm.calculateDeviceStatus(*device)
+			}
+		} else {
+			status = dm.calculateDeviceStatus(*device)
 		}
 	case SourceMock, SourceFallback:
 		status = dm.calculateDeviceStatus(*device)
@@ -544,6 +647,8 @@ func (dm *DataManager) SwitchDataSource(source DataSource) error {
 	switch source {
 	case SourceMiddleware:
 		return dm.loadFromMiddleware()
+	case SourceDatabase:
+		return dm.loadFromDatabase()
 	case SourceMock:
 		return dm.loadFromMock()
 	case SourceFallback:
@@ -574,18 +679,32 @@ func (dm *DataManager) GetStatus() map[string]interface{} {
 		}
 	}
 
+	// 数据库状态
+	var dbStatus map[string]interface{}
+	if dm.dbManager != nil {
+		dbStatus = dm.dbManager.GetStatus()
+	} else {
+		dbStatus = map[string]interface{}{
+			"enabled": false,
+		}
+	}
+
 	return map[string]interface{}{
-		"data_source":      string(dm.currentSource),
-		"device_count":     len(dm.devices),
+		"data_source":       string(dm.currentSource),
+		"device_count":      len(dm.devices),
 		"status_cache_size": len(dm.deviceStatuses),
-		"last_update":      dm.lastUpdate.Format(time.RFC3339),
-		"update_interval":  dm.updateInterval.Seconds(),
-		"cache_info":       cacheInfo,
+		"last_update":       dm.lastUpdate.Format(time.RFC3339),
+		"update_interval":   dm.updateInterval.Seconds(),
+		"cache_info":        cacheInfo,
+		"database_status":   dbStatus,
 		"config": map[string]interface{}{
-			"middleware_url":   dm.config.MiddlewareURL,
-			"cache_ttl":        dm.config.CacheTTL.Seconds(),
-			"enable_fallback":  dm.config.EnableFallback,
-			"fallback_timeout": dm.config.FallbackTimeout.Seconds(),
+			"middleware_url":      dm.config.MiddlewareURL,
+			"enable_database":     dm.config.EnableDatabase,
+			"database_type":       dm.config.DatabaseType,
+			"data_retention_days": dm.config.DataRetentionDays,
+			"cache_ttl":           dm.config.CacheTTL.Seconds(),
+			"enable_fallback":     dm.config.EnableFallback,
+			"fallback_timeout":    dm.config.FallbackTimeout.Seconds(),
 		},
 	}
 }
@@ -604,6 +723,13 @@ func (dm *DataManager) ClearCache() {
 // Stop 停止数据管理器
 func (dm *DataManager) Stop() {
 	close(dm.stopChan)
+
+	// 关闭数据库管理器
+	if dm.dbManager != nil {
+		if err := dm.dbManager.Close(); err != nil {
+			log.Printf("关闭数据库管理器失败: %v", err)
+		}
+	}
 }
 
 // Refresh 手动刷新数据
@@ -618,6 +744,8 @@ func (dm *DataManager) Refresh() error {
 	switch dm.currentSource {
 	case SourceMiddleware:
 		return dm.loadFromMiddleware()
+	case SourceDatabase:
+		return dm.loadFromDatabase()
 	case SourceMock:
 		return dm.loadFromMock()
 	case SourceFallback:
@@ -625,4 +753,77 @@ func (dm *DataManager) Refresh() error {
 	default:
 		return dm.loadFromFallback()
 	}
+}
+
+// ==================== 数据库相关方法 ====================
+
+// startDatabaseCleanup 启动数据库清理任务
+func (dm *DataManager) startDatabaseCleanup() {
+	if dm.dbManager == nil {
+		return
+	}
+
+	// 每天清理一次旧数据
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			retentionDays := dm.config.DataRetentionDays
+			if retentionDays <= 0 {
+				retentionDays = 30 // 默认保留30天
+			}
+
+			if err := dm.dbManager.CleanupOldData(retentionDays); err != nil {
+				log.Printf("数据库清理失败: %v", err)
+			}
+		case <-dm.stopChan:
+			return
+		}
+	}
+}
+
+// SyncToDatabase 同步数据到数据库
+func (dm *DataManager) SyncToDatabase() error {
+	if dm.dbManager == nil {
+		return fmt.Errorf("数据库管理器未初始化")
+	}
+
+	dm.mutex.RLock()
+	devices := dm.devices
+	dm.mutex.RUnlock()
+
+	if err := dm.dbManager.SyncDevicesFromMiddleware(devices); err != nil {
+		return fmt.Errorf("同步数据到数据库失败: %v", err)
+	}
+
+	return nil
+}
+
+// GetDatabaseStatistics 获取数据库统计信息
+func (dm *DataManager) GetDatabaseStatistics() (map[string]interface{}, error) {
+	if dm.dbManager == nil {
+		return nil, fmt.Errorf("数据库管理器未初始化")
+	}
+
+	return dm.dbManager.GetStatistics()
+}
+
+// GetDeviceHistory 获取设备历史数据
+func (dm *DataManager) GetDeviceHistory(deviceID string, hours int) ([]types.DeviceStatus, error) {
+	if dm.dbManager == nil {
+		return nil, fmt.Errorf("数据库管理器未初始化")
+	}
+
+	return dm.dbManager.GetDeviceStatusHistory(deviceID, hours)
+}
+
+// GetReagentConsumptionTrend 获取试剂消耗趋势
+func (dm *DataManager) GetReagentConsumptionTrend(deviceID, reagentName string, hours int) ([]database.ReagentConsumptionTrend, error) {
+	if dm.dbManager == nil {
+		return nil, fmt.Errorf("数据库管理器未初始化")
+	}
+
+	return dm.dbManager.GetReagentConsumptionTrend(deviceID, reagentName, hours)
 }

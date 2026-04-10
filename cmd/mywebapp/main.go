@@ -76,6 +76,13 @@ func main() {
 	mux.HandleFunc("/api/admin/refresh", handlers.RefreshDataHandler)
 	mux.HandleFunc("/api/admin/status", handlers.DataManagerStatusHandler)
 
+	// 历史数据API
+	mux.HandleFunc("/api/history/devices/", handlers.DeviceHistoryHandler)
+	mux.HandleFunc("/api/history/devices", handlers.AllDevicesHistoryHandler)
+	mux.HandleFunc("/api/history/reagents/", handlers.ReagentConsumptionHistoryHandler)
+	mux.HandleFunc("/api/history/statistics/database", handlers.DatabaseStatisticsHandler)
+	mux.HandleFunc("/api/history/statistics/data-source", handlers.DataSourceHistoryHandler)
+
 	// 智能查找静态文件目录（三重回退机制）
 	staticDir := findStaticDir()
 	log.Printf("使用的静态文件目录: %s", staticDir)
@@ -107,6 +114,11 @@ func main() {
 	fmt.Println("数据管理API: http://localhost:8083/api/admin/data-source")
 	fmt.Println("数据刷新API: http://localhost:8083/api/admin/refresh")
 	fmt.Println("管理器状态API: http://localhost:8083/api/admin/status")
+	fmt.Println("设备历史API: http://localhost:8083/api/history/devices/{deviceID}")
+	fmt.Println("所有设备历史API: http://localhost:8083/api/history/devices")
+	fmt.Println("试剂消耗历史API: http://localhost:8083/api/history/reagents/{deviceID}/{reagentName}")
+	fmt.Println("数据库统计API: http://localhost:8083/api/history/statistics/database")
+	fmt.Println("数据源历史API: http://localhost:8083/api/history/statistics/data-source")
 
 	log.Fatal(http.ListenAndServe(":8083", mux))
 }
@@ -163,14 +175,18 @@ func findStaticDir() string {
 func initDataManager() {
 	// 配置数据管理器
 	config := &data.Config{
-		DataSource:      data.SourceMiddleware, // 默认尝试连接中间件
-		MiddlewareURL:   "http://localhost:8080", // 俄罗斯中间件地址
-		CacheTTL:        30 * time.Second,
-		UpdateInterval:  30 * time.Second,
-		MaxRetries:      3,
-		RetryDelay:      1 * time.Second,
-		EnableFallback:  true, // 启用回退
-		FallbackTimeout: 5 * time.Second,
+		DataSource:        data.SourceMiddleware, // 默认尝试连接中间件
+		MiddlewareURL:     "http://localhost:8080", // 俄罗斯中间件地址
+		DatabaseType:      "sqlite",
+		SQLitePath:        "./data/project47.db",
+		EnableDatabase:    true, // 启用数据库功能
+		CacheTTL:          30 * time.Second,
+		UpdateInterval:    30 * time.Second,
+		MaxRetries:        3,
+		RetryDelay:        1 * time.Second,
+		EnableFallback:    true, // 启用回退
+		FallbackTimeout:   5 * time.Second,
+		DataRetentionDays: 30,   // 保留30天历史数据
 	}
 
 	// 初始化全局管理器
@@ -196,5 +212,14 @@ func initDataManager() {
 		log.Printf("数据管理器初始化完成")
 		log.Printf("当前数据源: %s", status["data_source"])
 		log.Printf("设备数量: %v", status["device_count"])
+
+		// 显示数据库状态
+		if dbStatus, ok := status["database_status"].(map[string]interface{}); ok {
+			if enabled, ok := dbStatus["enabled"].(bool); ok && enabled {
+				log.Printf("数据库功能已启用")
+			} else {
+				log.Printf("数据库功能未启用或初始化失败")
+			}
+		}
 	}
 }
