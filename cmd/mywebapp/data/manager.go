@@ -42,22 +42,22 @@ type DataManager struct {
 // Config 数据管理器配置
 type Config struct {
 	// 数据源配置
-	DataSource      DataSource `json:"data_source"`
-	MiddlewareURL   string     `json:"middleware_url"`
-	MiddlewareAPIKey string    `json:"middleware_api_key"`
+	DataSource       DataSource `json:"data_source"`
+	MiddlewareURL    string     `json:"middleware_url"`
+	MiddlewareAPIKey string     `json:"middleware_api_key"`
 
 	// 数据库配置
-	DatabaseType    string        `json:"database_type"`
-	SQLitePath      string        `json:"sqlite_path"`
-	EnableDatabase  bool          `json:"enable_database"`
+	DatabaseType   string `json:"database_type"`
+	SQLitePath     string `json:"sqlite_path"`
+	EnableDatabase bool   `json:"enable_database"`
 
 	// 缓存配置
-	CacheTTL        time.Duration `json:"cache_ttl"`
-	UpdateInterval  time.Duration `json:"update_interval"`
+	CacheTTL       time.Duration `json:"cache_ttl"`
+	UpdateInterval time.Duration `json:"update_interval"`
 
 	// 重试配置
-	MaxRetries      int           `json:"max_retries"`
-	RetryDelay      time.Duration `json:"retry_delay"`
+	MaxRetries int           `json:"max_retries"`
+	RetryDelay time.Duration `json:"retry_delay"`
 
 	// 回退配置
 	EnableFallback  bool          `json:"enable_fallback"`
@@ -115,10 +115,10 @@ func NewDataManager(config *Config) (*DataManager, error) {
 	// 初始化数据库管理器
 	if config.EnableDatabase {
 		dbConfig := &database.DBConfig{
-			Type:             config.DatabaseType,
-			SQLitePath:       config.SQLitePath,
-			AutoMigrate:      true,
-			EnableQueryLog:   false,
+			Type:           config.DatabaseType,
+			SQLitePath:     config.SQLitePath,
+			AutoMigrate:    true,
+			EnableQueryLog: false,
 		}
 		dbManager, err := database.NewDatabaseManager(dbConfig)
 		if err != nil {
